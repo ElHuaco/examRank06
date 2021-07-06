@@ -47,17 +47,19 @@ t_serv_conf	load_server_conf(unsigned short int port)
 static void	add_client(t_serv_conf *serv, t_list **clients)
 {
 	//TODO: accept(), actualizar max, añadir a lista y FD_SET
+	//mensaje al resto de "server: client %d just arrived\n"
 }
 
 static void	remove_client(t_serv_conf *serv, t_list **clients)
 {
 	//TODO: close(), actualizar max, quitar de la lista y FD_CLR
+	//mensaje de "server: client %d just left\n"
 }
 
 static void	send_messages(int sender, char *buff, fd_set *write_fds,
 	t_list **clients)
 {
-	//TODO: sprintf(client %d: ) a cada línea de buff
+	//TODO: sprintf("client %d: ") a cada línea de buff
 	t_list *temp = (*client)->next;
 	while (temp != NULL)
 	{
