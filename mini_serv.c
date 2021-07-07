@@ -6,8 +6,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-//TODO: enters sueltos de mensajes
-
 typedef struct		s_list
 {
 	int				fd;
@@ -34,8 +32,6 @@ static void	fatal_exit(void)
 
 static int	ft_digit_num(int num)
 {
-	if (num < 0)
-		num *= -1;
 	int digits = 1;
 	while ((num /= 10) > 0)
 		digits++;
@@ -52,9 +48,10 @@ t_serv_conf	load_server_conf(unsigned short int port)
 	servaddr.sin_port = htons(port);
 	if ((listener = socket(AF_INET, SOCK_STREAM, 0)) == -1)
 		fatal_exit();
-	if (bind(listener, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0)
+	if (bind(listener, (const struct sockaddr *)&servaddr,
+		sizeof(servaddr)) < 0)
 		fatal_exit();
-	if (listen(listener, 10) < 0)
+	if (listen(listener, 0) < 0)
 		fatal_exit();
 	t_serv_conf serv;
 	serv.listener = listener;
@@ -92,9 +89,10 @@ static void	add_client(t_serv_conf *serv, t_list **clients)
 	newclient->next = NULL;
 	temp->next = newclient;
 	char *message;
-	if (!(message = malloc(sizeof(char) * (ft_digit_num(newfd) + 31))))
+	if (!(message = calloc(ft_digit_num(newfd) + 31, sizeof(char))))
 		fatal_exit();
-	if (sprintf(message, "server: client %d just arrived\n", newclient->id) < 0)
+	if (sprintf(message, "server: client %d just arrived\n",
+		newclient->id) < 0)
 		fatal_exit();
 	*clients = init;
 	temp = (*clients)->next;
@@ -105,8 +103,8 @@ static void	add_client(t_serv_conf *serv, t_list **clients)
 			fatal_exit();
 		temp = temp->next;
 	}
-	free(message);
 	*clients = init;
+	free(message);
 }
 
 static void	remove_client(t_list *removed, t_serv_conf *serv, t_list **clients)
@@ -116,13 +114,14 @@ static void	remove_client(t_list *removed, t_serv_conf *serv, t_list **clients)
 	FD_CLR(removed->fd, &serv->read_master);
 	FD_CLR(removed->fd, &serv->write_master);
 	char *message;
-	if (!(message = malloc(sizeof(char) * (ft_digit_num(removed->id) + 28))))
+	if (!(message = calloc(ft_digit_num(removed->id) + 28, sizeof(char))))
 		fatal_exit();
-	if (sprintf(message, "server: client %d just left\n", removed->id) < 0)
+	if (sprintf(message, "server: client %d just left\n",
+		removed->id) < 0)
 		fatal_exit();
 	t_list *init = *clients;
 	t_list *temp = *clients;
-	int max_r = removed->fd;
+	int removedfd = removed->fd;
 	while (temp != NULL)
 	{
 		if (temp->next != NULL && temp->next == removed)
@@ -135,7 +134,7 @@ static void	remove_client(t_list *removed, t_serv_conf *serv, t_list **clients)
 			fatal_exit();
 		temp = temp->next;
 	}
-	if (serv->max == max_r)
+	if (serv->max == removedfd)
 	{
 		serv->max = 0;
 		*clients = init;
@@ -148,22 +147,21 @@ static void	remove_client(t_list *removed, t_serv_conf *serv, t_list **clients)
 		}
 	}
 	*clients = init;
+	free(message);
 }
 
 static void	send_messages(t_list *sender, char *buff, t_serv_conf *serv,
 	t_list *clients)
 {
 	char *message;
-	if (!(message = malloc(sizeof(char))))
+	if (!(message = calloc(1, sizeof(char))))
 		fatal_exit();
-	*message = '\0';
 	char *nlpos;
-	//acaba siempre en \n\0 el buff??
 	while ((nlpos = strstr(buff, "\n")) != NULL)
 	{
 		*nlpos = '\0';
 		if (!(message = realloc(message, strlen(message) + nlpos - buff
-			+ ft_digit_num(sender->id) + 11)))
+			+ ft_digit_num(sender->id) + 12)))
 			fatal_exit();
 		if (sprintf(message, "client %d: %s\n", sender->id, buff) < 0)
 			fatal_exit();
