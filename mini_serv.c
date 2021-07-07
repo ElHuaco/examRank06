@@ -6,11 +6,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-//TODO: enters sueltos de mensajes, error al desconectar primer usuario
+//TODO: enters sueltos de mensajes
 
 typedef struct		s_list
 {
 	int				fd;
+	int				id;
 	struct s_list	*next;
 }					t_list;
 
@@ -44,7 +45,7 @@ static int	ft_digit_num(int num)
 t_serv_conf	load_server_conf(unsigned short int port)
 {
 	int listener;
-	struct sockaddr_in servaddr; //struct sockaddr, sockaddr_in?
+	struct sockaddr_in servaddr;
 	bzero(&servaddr, sizeof(servaddr));
 	servaddr.sin_family = AF_INET;
 	servaddr.sin_addr.s_addr = htonl(2130706433); //127.0.0.1
@@ -64,7 +65,6 @@ t_serv_conf	load_server_conf(unsigned short int port)
 	FD_ZERO(&serv.write_fds);
 	FD_ZERO(&serv.write_master);
 	FD_SET(listener, &serv.write_master);
-printf("Server configuration finished.\n");
 	return (serv);
 }
 
@@ -76,16 +76,10 @@ static void	add_client(t_serv_conf *serv, t_list **clients)
 	if ((newfd = accept(serv->listener, (struct sockaddr *)&remoteaddr,
 		&addrlen)) == -1)
 		fatal_exit();
-printf("\tAccepted new connection.\n");
 	FD_SET(newfd, &serv->read_master);
 	FD_SET(newfd, &serv->write_master);
 	if (newfd > serv->max)
 		serv->max = newfd;
-	char *message;
-	if (!(message = malloc(sizeof(char) * (ft_digit_num(newfd) + 31))))
-		fatal_exit();
-	if (sprintf(message, "server: client %d just arrived\n", newfd) < 0)
-		fatal_exit();
 	t_list *init = *clients;
 	t_list *temp = *clients;
 	while (temp->next != NULL)
@@ -94,8 +88,14 @@ printf("\tAccepted new connection.\n");
 	if (!(newclient = malloc(sizeof(t_list))))
 		fatal_exit();
 	newclient->fd = newfd;
+	newclient->id = init->id++ + 1;
 	newclient->next = NULL;
 	temp->next = newclient;
+	char *message;
+	if (!(message = malloc(sizeof(char) * (ft_digit_num(newfd) + 31))))
+		fatal_exit();
+	if (sprintf(message, "server: client %d just arrived\n", newclient->id) < 0)
+		fatal_exit();
 	*clients = init;
 	temp = (*clients)->next;
 	while (temp != NULL)
@@ -103,48 +103,43 @@ printf("\tAccepted new connection.\n");
 		if (FD_ISSET(temp->fd, &serv->write_fds) && temp->fd != newfd
 			&& send(temp->fd, message, strlen(message), 0) == -1)
 			fatal_exit();
-printf("\tSent new user message to %d.\n", temp->fd);
 		temp = temp->next;
 	}
 	free(message);
 	*clients = init;
 }
 
-static void	remove_client(int removed, t_serv_conf *serv, t_list **clients)
+static void	remove_client(t_list *removed, t_serv_conf *serv, t_list **clients)
 {
-	if (close(removed) == -1)
+	if (close(removed->fd) == -1)
 		fatal_exit();
-printf("\tClosed the removed user connection.\n");
-	FD_CLR(removed, &serv->read_master);
-	FD_CLR(removed, &serv->write_master);
+	FD_CLR(removed->fd, &serv->read_master);
+	FD_CLR(removed->fd, &serv->write_master);
 	char *message;
-	if (!(message = malloc(sizeof(char) * (ft_digit_num(removed) + 28))))
+	if (!(message = malloc(sizeof(char) * (ft_digit_num(removed->id) + 28))))
 		fatal_exit();
-	if (sprintf(message, "server: client %d just left\n", removed) < 0)
+	if (sprintf(message, "server: client %d just left\n", removed->id) < 0)
 		fatal_exit();
-printf("\tCreated user left message\n");
 	t_list *init = *clients;
-	t_list *temp = (*clients)->next;
+	t_list *temp = *clients;
+	int max_r = removed->fd;
 	while (temp != NULL)
 	{
-printf("\t\tChecking %d\n", temp->fd);
-		if (temp->next != NULL && temp->next->fd == removed)
+		if (temp->next != NULL && temp->next == removed)
 		{
-			t_list *temp2 = temp->next;
-			temp->next = temp2->next;
-			free(temp2);
+			temp->next = removed->next;
+			free(removed);
 		}
 		if (FD_ISSET(temp->fd, &serv->write_fds) && temp->fd != serv->listener
 			&& send(temp->fd, message, strlen(message), 0) == -1)
 			fatal_exit();
-printf("\tSent user left message to %d\n", temp->fd);
 		temp = temp->next;
 	}
-	if (serv->max == removed)
+	if (serv->max == max_r)
 	{
 		serv->max = 0;
 		*clients = init;
-		temp = (*clients)->next;
+		temp = *clients;
 		while (temp != NULL)
 		{
 			if (temp->fd > serv->max)
@@ -155,7 +150,7 @@ printf("\tSent user left message to %d\n", temp->fd);
 	*clients = init;
 }
 
-static void	send_messages(int sender, char *buff, t_serv_conf *serv,
+static void	send_messages(t_list *sender, char *buff, t_serv_conf *serv,
 	t_list *clients)
 {
 	char *message;
@@ -168,9 +163,9 @@ static void	send_messages(int sender, char *buff, t_serv_conf *serv,
 	{
 		*nlpos = '\0';
 		if (!(message = realloc(message, strlen(message) + nlpos - buff
-			+ ft_digit_num(sender) + 11)))
+			+ ft_digit_num(sender->id) + 11)))
 			fatal_exit();
-		if (sprintf(message, "client %d: %s\n", sender, buff) < 0)
+		if (sprintf(message, "client %d: %s\n", sender->id, buff) < 0)
 			fatal_exit();
 		buff = nlpos + 1;
 	}
@@ -178,10 +173,9 @@ static void	send_messages(int sender, char *buff, t_serv_conf *serv,
 	{
 		if (FD_ISSET(clients->fd, &serv->write_fds)
 			&& clients->fd != serv->listener
-			&& clients->fd != sender
+			&& clients->fd != sender->fd
 			&& send(clients->fd, message, strlen(message), 0) == -1)
 			fatal_exit();
-printf("\tSent a message to user %d\n", clients->fd);
 		clients = clients->next;
 	}
 	free(message);
@@ -200,6 +194,7 @@ int	main(int argc, char **argv)
 	if (!(clients = malloc(sizeof(t_list))))
 		fatal_exit();
 	clients->fd = serv.listener;
+	clients->id = -1;
 	clients->next = NULL;
 	t_list *temp;
 	while(1)
@@ -213,24 +208,15 @@ int	main(int argc, char **argv)
 			if (!FD_ISSET(temp->fd, &serv.read_fds))
 				continue ;
 			if (temp->fd == serv.listener)
-			{
-printf("Adding a new client...\n");
 				add_client(&serv, &clients);
-			}
 			else
 			{
 				char buff[4096];
 				memset(buff, 0, sizeof(buff));
 				if (recv(temp->fd, buff, sizeof(buff), 0) <= 0)
-				{
-printf("Removing a disconnected client...\n");
-					remove_client(temp->fd, &serv, &clients);
-				}
+					remove_client(temp, &serv, &clients);
 				else
-				{
-printf("Sending a message...\n");
-					send_messages(temp->fd, buff, &serv, clients);
-				}
+					send_messages(temp, buff, &serv, clients);
 			}
 		}
 	}
