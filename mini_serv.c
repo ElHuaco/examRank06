@@ -23,14 +23,14 @@ typedef struct		s_serv_conf
 	int				max;
 }					t_serv_conf;
 
-static void	fatal_exit(void)
+static void			fatal_exit(void)
 {
 	char *str = "Fatal error\n";
 	write(2, str, strlen(str));
 	exit(1);
 }
 
-static int	ft_digits(int num)
+static int			ft_digits(int num)
 {
 	int digits = 1;
 	while ((num /= 10) > 0)
@@ -38,7 +38,7 @@ static int	ft_digits(int num)
 	return (digits);
 }
 
-t_serv_conf	load_server_conf(unsigned short int port)
+static t_serv_conf	load_server_conf(unsigned short int port)
 {
 	int listener;
 	struct sockaddr_in servaddr;
@@ -63,7 +63,7 @@ t_serv_conf	load_server_conf(unsigned short int port)
 	return (serv);
 }
 
-static void	add_user(t_serv_conf *serv, t_list **clients)
+static void			add_user(t_serv_conf *serv, t_list **clients)
 {
 	struct sockaddr_storage remoteaddr;
 	socklen_t addrlen = sizeof(remoteaddr);
@@ -94,7 +94,7 @@ static void	add_user(t_serv_conf *serv, t_list **clients)
 	while (temp != NULL)
 	{
 		if (FD_ISSET(temp->fd, &serv->write_fds) && temp->fd != newfd
-			&& send(temp->fd, message, sizeof(message), 0) == -1)
+			&& send(temp->fd, message, strlen(message), 0) == -1)
 			fatal_exit();
 		temp = temp->next;
 	}
@@ -104,7 +104,8 @@ static void	add_user(t_serv_conf *serv, t_list **clients)
 	free(message);
 }
 
-static void	remove_user(t_list *removed, t_serv_conf *serv, t_list **clients)
+static t_list		*remove_user(t_list *removed, t_serv_conf *serv,
+	t_list **clients)
 {
 	if (close(removed->fd) < 0)
 		fatal_exit();
@@ -115,13 +116,17 @@ static void	remove_user(t_list *removed, t_serv_conf *serv, t_list **clients)
 		|| sprintf(message, "server: client %d just left\n", removed->id) < 0)
 		fatal_exit();
 	t_list *init = *clients;
+	t_list *ret;
 	t_list *temp = *clients;
 	while (temp != NULL)
 	{
 		if (temp->next == removed)
+		{
+			ret = temp;
 			temp->next = removed->next;
+		}
 		if (FD_ISSET(temp->fd, &serv->write_fds) && temp->fd != serv->listener
-			&& send(temp->fd, message, sizeof(message), 0) == -1)
+			&& send(temp->fd, message, strlen(message), 0) == -1)
 			fatal_exit();
 		temp = temp->next;
 	}
@@ -136,12 +141,13 @@ static void	remove_user(t_list *removed, t_serv_conf *serv, t_list **clients)
 			temp = temp->next;
 		}
 	}
-	free(removed);
 	*clients = init;
 	free(message);
+	free(removed);
+	return (ret);
 }
 
-static void	send_messages(t_list *sender, char *buff, t_serv_conf *serv,
+static void			send_messages(t_list *sender, char *buff, t_serv_conf *serv,
 	t_list *clients)
 {
 	char *message;
@@ -160,7 +166,7 @@ static void	send_messages(t_list *sender, char *buff, t_serv_conf *serv,
 			if (FD_ISSET(clients->fd, &serv->write_fds)
 				&& clients->fd != serv->listener
 				&& clients->fd != sender->fd
-				&& send(clients->fd, message, sizeof(message), 0) == -1)
+				&& send(clients->fd, message, strlen(message), 0) == -1)
 				fatal_exit();
 			clients = clients->next;
 		}
@@ -169,7 +175,7 @@ static void	send_messages(t_list *sender, char *buff, t_serv_conf *serv,
 	}
 }
 
-int	main(int argc, char **argv)
+int					main(int argc, char **argv)
 {
 	if (argc != 2)
 	{
@@ -202,10 +208,7 @@ int	main(int argc, char **argv)
 				char buff[4096];
 				bzero(buff, sizeof(buff));
 				if (recv(temp->fd, buff, sizeof(buff), 0) <= 0)
-				{
-					remove_user(temp, &serv, &clients);
-					temp = clients;
-				}
+					temp = remove_user(temp, &serv, &clients);
 				else
 					send_messages(temp, buff, &serv, clients);
 			}
