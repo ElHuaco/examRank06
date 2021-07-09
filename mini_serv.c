@@ -6,9 +6,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-//TODO:segfault 11, sizeof ó strlen en memset, etc.
-// simplificar código
-
 typedef struct		s_list
 {
 	int				fd;
@@ -63,13 +60,11 @@ t_serv_conf	load_server_conf(unsigned short int port)
 	FD_ZERO(&serv.write_master);
 	FD_SET(listener, &serv.write_master);
 	serv.max = listener;
-printf("Server conf loaded.\n");
 	return (serv);
 }
 
 static void	add_user(t_serv_conf *serv, t_list **clients)
 {
-printf("Entered add_user...\n");
 	struct sockaddr_storage remoteaddr;
 	socklen_t addrlen = sizeof(remoteaddr);
 	bzero(&remoteaddr, addrlen);
@@ -91,7 +86,7 @@ printf("Entered add_user...\n");
 	newclient->next = NULL;
 	temp->next = newclient;
 	char *message;
-	if (!(message = calloc(ft_digits(newfd) + 31, sizeof(char)))
+	if (!(message = calloc(ft_digits(newfd) + 30, sizeof(char)))
 		|| sprintf(message, "server: client %d just arrived\n",
 			newclient->id) < 0)
 		fatal_exit();
@@ -107,18 +102,16 @@ printf("Entered add_user...\n");
 		serv->max = newfd;
 	*clients = init;
 	free(message);
-printf("Exited add_user().\n");
 }
 
 static void	remove_user(t_list *removed, t_serv_conf *serv, t_list **clients)
 {
-printf("Entered remove_user()...\n");
 	if (close(removed->fd) < 0)
 		fatal_exit();
 	FD_CLR(removed->fd, &serv->read_master);
 	FD_CLR(removed->fd, &serv->write_master);
 	char *message;
-	if (!(message = calloc(ft_digits(removed->id) + 28, sizeof(char)))
+	if (!(message = calloc(ft_digits(removed->id) + 27, sizeof(char)))
 		|| sprintf(message, "server: client %d just left\n", removed->id) < 0)
 		fatal_exit();
 	t_list *init = *clients;
@@ -146,23 +139,19 @@ printf("Entered remove_user()...\n");
 	free(removed);
 	*clients = init;
 	free(message);
-printf("Exited remove_user().\n");
 }
 
 static void	send_messages(t_list *sender, char *buff, t_serv_conf *serv,
 	t_list *clients)
 {
-printf("Entered send_messages()...\n");
 	char *message;
-	if (!(message = calloc(1, sizeof(char))))
-		fatal_exit();
 	char *nlpos;
 	t_list *init = clients;
 	while ((nlpos = strstr(buff, "\n")) != NULL)
 	{
 		*nlpos = '\0';
-		if (!(message = realloc(message, strlen(message) + nlpos - buff
-			+ ft_digits(sender->id) + 12))
+		if (!(message = calloc(nlpos - buff + ft_digits(sender->id) + 11,
+				sizeof(char)))
 			|| sprintf(message, "client %d: %s\n", sender->id, buff) < 0)
 			fatal_exit();
 		clients = init;
@@ -176,9 +165,8 @@ printf("Entered send_messages()...\n");
 			clients = clients->next;
 		}
 		buff = nlpos + 1;
+		free(message);
 	}
-	free(message);
-printf("Exited send_messages().\n");
 }
 
 int	main(int argc, char **argv)
