@@ -6,6 +6,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+//TODO:segfault 11, sizeof ó strlen en memset, etc.
+// simplificar código
+
 typedef struct		s_list
 {
 	int				fd;
@@ -30,7 +33,7 @@ static void	fatal_exit(void)
 	exit(1);
 }
 
-static int	ft_digit_num(int num)
+static int	ft_digits(int num)
 {
 	int digits = 1;
 	while ((num /= 10) > 0)
@@ -46,37 +49,36 @@ t_serv_conf	load_server_conf(unsigned short int port)
 	servaddr.sin_family = AF_INET;
 	servaddr.sin_addr.s_addr = htonl(2130706433); //127.0.0.1
 	servaddr.sin_port = htons(port);
-	if ((listener = socket(AF_INET, SOCK_STREAM, 0)) == -1)
-		fatal_exit();
-	if (bind(listener, (const struct sockaddr *)&servaddr,
-		sizeof(servaddr)) < 0)
-		fatal_exit();
-	if (listen(listener, 0) < 0)
+	if ((listener = socket(AF_INET, SOCK_STREAM, 0)) < 0
+		|| bind(listener, (const struct sockaddr *)&servaddr,
+			sizeof(servaddr)) < 0
+		|| listen(listener, 0) < 0)
 		fatal_exit();
 	t_serv_conf serv;
 	serv.listener = listener;
-	serv.max = listener;
 	FD_ZERO(&serv.read_fds);
 	FD_ZERO(&serv.read_master);
 	FD_SET(listener, &serv.read_master);
 	FD_ZERO(&serv.write_fds);
 	FD_ZERO(&serv.write_master);
 	FD_SET(listener, &serv.write_master);
+	serv.max = listener;
+printf("Server conf loaded.\n");
 	return (serv);
 }
 
-static void	add_client(t_serv_conf *serv, t_list **clients)
+static void	add_user(t_serv_conf *serv, t_list **clients)
 {
+printf("Entered add_user...\n");
 	struct sockaddr_storage remoteaddr;
 	socklen_t addrlen = sizeof(remoteaddr);
+	bzero(&remoteaddr, addrlen);
 	int newfd;
 	if ((newfd = accept(serv->listener, (struct sockaddr *)&remoteaddr,
-		&addrlen)) == -1)
+		&addrlen)) < 0)
 		fatal_exit();
 	FD_SET(newfd, &serv->read_master);
 	FD_SET(newfd, &serv->write_master);
-	if (newfd > serv->max)
-		serv->max = newfd;
 	t_list *init = *clients;
 	t_list *temp = *clients;
 	while (temp->next != NULL)
@@ -89,13 +91,11 @@ static void	add_client(t_serv_conf *serv, t_list **clients)
 	newclient->next = NULL;
 	temp->next = newclient;
 	char *message;
-	if (!(message = calloc(ft_digit_num(newfd) + 31, sizeof(char))))
+	if (!(message = calloc(ft_digits(newfd) + 31, sizeof(char)))
+		|| sprintf(message, "server: client %d just arrived\n",
+			newclient->id) < 0)
 		fatal_exit();
-	if (sprintf(message, "server: client %d just arrived\n",
-		newclient->id) < 0)
-		fatal_exit();
-	*clients = init;
-	temp = (*clients)->next;
+	temp = init->next;
 	while (temp != NULL)
 	{
 		if (FD_ISSET(temp->fd, &serv->write_fds) && temp->fd != newfd
@@ -103,42 +103,39 @@ static void	add_client(t_serv_conf *serv, t_list **clients)
 			fatal_exit();
 		temp = temp->next;
 	}
+	if (newfd > serv->max)
+		serv->max = newfd;
 	*clients = init;
 	free(message);
+printf("Exited add_user().\n");
 }
 
-static void	remove_client(t_list *removed, t_serv_conf *serv, t_list **clients)
+static void	remove_user(t_list *removed, t_serv_conf *serv, t_list **clients)
 {
-	if (close(removed->fd) == -1)
+printf("Entered remove_user()...\n");
+	if (close(removed->fd) < 0)
 		fatal_exit();
 	FD_CLR(removed->fd, &serv->read_master);
 	FD_CLR(removed->fd, &serv->write_master);
 	char *message;
-	if (!(message = calloc(ft_digit_num(removed->id) + 28, sizeof(char))))
-		fatal_exit();
-	if (sprintf(message, "server: client %d just left\n",
-		removed->id) < 0)
+	if (!(message = calloc(ft_digits(removed->id) + 28, sizeof(char)))
+		|| sprintf(message, "server: client %d just left\n", removed->id) < 0)
 		fatal_exit();
 	t_list *init = *clients;
 	t_list *temp = *clients;
-	int removedfd = removed->fd;
 	while (temp != NULL)
 	{
-		if (temp->next != NULL && temp->next == removed)
-		{
+		if (temp->next == removed)
 			temp->next = removed->next;
-			free(removed);
-		}
 		if (FD_ISSET(temp->fd, &serv->write_fds) && temp->fd != serv->listener
 			&& send(temp->fd, message, strlen(message), 0) == -1)
 			fatal_exit();
 		temp = temp->next;
 	}
-	if (serv->max == removedfd)
+	if (serv->max == removed->fd)
 	{
 		serv->max = 0;
-		*clients = init;
-		temp = *clients;
+		temp = init;
 		while (temp != NULL)
 		{
 			if (temp->fd > serv->max)
@@ -146,37 +143,42 @@ static void	remove_client(t_list *removed, t_serv_conf *serv, t_list **clients)
 			temp = temp->next;
 		}
 	}
+	free(removed);
 	*clients = init;
 	free(message);
+printf("Exited remove_user().\n");
 }
 
 static void	send_messages(t_list *sender, char *buff, t_serv_conf *serv,
 	t_list *clients)
 {
+printf("Entered send_messages()...\n");
 	char *message;
 	if (!(message = calloc(1, sizeof(char))))
 		fatal_exit();
 	char *nlpos;
+	t_list *init = clients;
 	while ((nlpos = strstr(buff, "\n")) != NULL)
 	{
 		*nlpos = '\0';
 		if (!(message = realloc(message, strlen(message) + nlpos - buff
-			+ ft_digit_num(sender->id) + 12)))
+			+ ft_digits(sender->id) + 12))
+			|| sprintf(message, "client %d: %s\n", sender->id, buff) < 0)
 			fatal_exit();
-		if (sprintf(message, "client %d: %s\n", sender->id, buff) < 0)
-			fatal_exit();
+		clients = init;
+		while (clients != NULL)
+		{
+			if (FD_ISSET(clients->fd, &serv->write_fds)
+				&& clients->fd != serv->listener
+				&& clients->fd != sender->fd
+				&& send(clients->fd, message, strlen(message), 0) == -1)
+				fatal_exit();
+			clients = clients->next;
+		}
 		buff = nlpos + 1;
 	}
-	while (clients != NULL)
-	{
-		if (FD_ISSET(clients->fd, &serv->write_fds)
-			&& clients->fd != serv->listener
-			&& clients->fd != sender->fd
-			&& send(clients->fd, message, strlen(message), 0) == -1)
-			fatal_exit();
-		clients = clients->next;
-	}
 	free(message);
+printf("Exited send_messages().\n");
 }
 
 int	main(int argc, char **argv)
@@ -206,13 +208,16 @@ int	main(int argc, char **argv)
 			if (!FD_ISSET(temp->fd, &serv.read_fds))
 				continue ;
 			if (temp->fd == serv.listener)
-				add_client(&serv, &clients);
+				add_user(&serv, &clients);
 			else
 			{
 				char buff[4096];
-				memset(buff, 0, sizeof(buff));
+				bzero(buff, sizeof(buff));
 				if (recv(temp->fd, buff, sizeof(buff), 0) <= 0)
-					remove_client(temp, &serv, &clients);
+				{
+					remove_user(temp, &serv, &clients);
+					temp = clients;
+				}
 				else
 					send_messages(temp, buff, &serv, clients);
 			}
