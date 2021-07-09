@@ -94,7 +94,7 @@ static void	add_user(t_serv_conf *serv, t_list **clients)
 	while (temp != NULL)
 	{
 		if (FD_ISSET(temp->fd, &serv->write_fds) && temp->fd != newfd
-			&& send(temp->fd, message, strlen(message), 0) == -1)
+			&& send(temp->fd, message, sizeof(message), 0) == -1)
 			fatal_exit();
 		temp = temp->next;
 	}
@@ -121,7 +121,7 @@ static void	remove_user(t_list *removed, t_serv_conf *serv, t_list **clients)
 		if (temp->next == removed)
 			temp->next = removed->next;
 		if (FD_ISSET(temp->fd, &serv->write_fds) && temp->fd != serv->listener
-			&& send(temp->fd, message, strlen(message), 0) == -1)
+			&& send(temp->fd, message, sizeof(message), 0) == -1)
 			fatal_exit();
 		temp = temp->next;
 	}
@@ -160,7 +160,7 @@ static void	send_messages(t_list *sender, char *buff, t_serv_conf *serv,
 			if (FD_ISSET(clients->fd, &serv->write_fds)
 				&& clients->fd != serv->listener
 				&& clients->fd != sender->fd
-				&& send(clients->fd, message, strlen(message), 0) == -1)
+				&& send(clients->fd, message, sizeof(message), 0) == -1)
 				fatal_exit();
 			clients = clients->next;
 		}
