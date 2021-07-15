@@ -6,10 +6,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define BUFFER_SIZE 4096
+
 typedef struct		s_list
 {
 	int				fd;
 	int				id;
+	char			*cache;
 	struct s_list	*next;
 }					t_list;
 
@@ -83,6 +86,8 @@ static void			add_user(t_serv_conf *serv, t_list **clients)
 		fatal_exit();
 	newclient->fd = newfd;
 	newclient->id = init->id++ + 1;
+	if (!(newclient->cache = calloc(1, sizeof(char))))
+		fatal_exit();
 	newclient->next = NULL;
 	temp->next = newclient;
 	char *message;
@@ -93,7 +98,8 @@ static void			add_user(t_serv_conf *serv, t_list **clients)
 	temp = init->next;
 	while (temp != NULL)
 	{
-		if (FD_ISSET(temp->fd, &serv->write_fds) && temp->fd != newfd
+		if (FD_ISSET(temp->fd, &serv->write_fds)
+			&& temp->fd != newfd
 			&& send(temp->fd, message, strlen(message), 0) == -1)
 			fatal_exit();
 		temp = temp->next;
@@ -125,7 +131,8 @@ static t_list		*remove_user(t_list *removed, t_serv_conf *serv,
 			ret = temp;
 			temp->next = removed->next;
 		}
-		if (FD_ISSET(temp->fd, &serv->write_fds) && temp->fd != serv->listener
+		if (FD_ISSET(temp->fd, &serv->write_fds) 
+			&& temp->fd != serv->listener
 			&& send(temp->fd, message, strlen(message), 0) == -1)
 			fatal_exit();
 		temp = temp->next;
@@ -143,6 +150,7 @@ static t_list		*remove_user(t_list *removed, t_serv_conf *serv,
 	}
 	*clients = init;
 	free(message);
+	free(removed->cache);
 	free(removed);
 	return (ret);
 }
@@ -150,15 +158,26 @@ static t_list		*remove_user(t_list *removed, t_serv_conf *serv,
 static void			send_messages(t_list *sender, char *buff, t_serv_conf *serv,
 	t_list *clients)
 {
-	char *message;
-	char *nlpos;
-	t_list *init = clients;
+	char	*message;
+	char	*nlpos;
+	t_list	*init = clients;
+
 	while ((nlpos = strstr(buff, "\n")) != NULL)
 	{
+		if (!(message = calloc(message, ft_digits(sender->id) + 10))
+			|| sprintf(message, "client %d: ", sender->id) < 0)
+			fatal_exit();
+		if (sender->cache[0] != '\0')
+		{
+			if (!(message = realloc(message, strlen(message)
+				+ strlen(sender->cache) + 1))
+				|| !strcat(message, sender->cache)
+				|| !realloc(sender->cache, 2) || !strcat(sender->cache, ""))
+				fatal_exit();
+		}
 		*nlpos = '\0';
-		if (!(message = calloc(nlpos - buff + ft_digits(sender->id) + 11,
-				sizeof(char)))
-			|| sprintf(message, "client %d: %s\n", sender->id, buff) < 0)
+		if (!(message = realloc(message,  strlen(message) + (nlpos - buff) + 1))
+			|| !strcat(message, buff) || !strcat(message, "\n"))
 			fatal_exit();
 		clients = init;
 		while (clients != NULL)
@@ -173,6 +192,11 @@ static void			send_messages(t_list *sender, char *buff, t_serv_conf *serv,
 		buff = nlpos + 1;
 		free(message);
 	}
+	if (*buff != '\0' &&
+		(!(sender->cache = realloc(sender->cache, strlen(sender->cache)
+		+ strlen(buff) + 1))
+		|| !strcat(sender->cache, buff)))
+		fatal_exit();
 }
 
 int					main(int argc, char **argv)
@@ -205,9 +229,12 @@ int					main(int argc, char **argv)
 				add_user(&serv, &clients);
 			else
 			{
-				char buff[4096];
+				char buff[BUFFER_SIZE];
 				bzero(buff, sizeof(buff));
-				if (recv(temp->fd, buff, sizeof(buff), 0) <= 0)
+				int rbytes;
+				if ((rbytes = recv(temp->fd, buff, BUFFER_SIZE, 0)) < 0)
+					fatal_exit();
+				else if (rbytes == 0)
 					temp = remove_user(temp, &serv, &clients);
 				else
 					send_messages(temp, buff, &serv, clients);
