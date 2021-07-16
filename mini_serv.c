@@ -13,6 +13,7 @@ typedef struct		s_list
 	int				fd;
 	int				id;
 	char			*cache;
+	int				cache_size;
 	struct s_list	*next;
 }					t_list;
 
@@ -82,13 +83,12 @@ static void			add_user(t_serv_conf *serv, t_list **clients)
 	while (temp->next != NULL)
 		temp = temp->next;
 	t_list *newclient;
-	if (!(newclient = malloc(sizeof(t_list))))
+	if (!(newclient = calloc(1, sizeof(t_list))))
 		fatal_exit();
 	newclient->fd = newfd;
 	newclient->id = init->id++ + 1;
 	if (!(newclient->cache = calloc(1, sizeof(char))))
 		fatal_exit();
-	newclient->next = NULL;
 	temp->next = newclient;
 	char *message;
 	if (!(message = calloc(ft_digits(newfd) + 30, sizeof(char)))
@@ -164,19 +164,23 @@ static void			send_messages(t_list *sender, char *buff, t_serv_conf *serv,
 
 	while ((nlpos = strstr(buff, "\n")) != NULL)
 	{
-		if (!(message = calloc(message, ft_digits(sender->id) + 10))
+		if (!(message = calloc(ft_digits(sender->id) + 10, sizeof(char)))
 			|| sprintf(message, "client %d: ", sender->id) < 0)
 			fatal_exit();
 		if (sender->cache[0] != '\0')
 		{
 			if (!(message = realloc(message, strlen(message)
-				+ strlen(sender->cache) + 1))
-				|| !strcat(message, sender->cache)
-				|| !realloc(sender->cache, 2) || !strcat(sender->cache, ""))
+				+ sender->cache_size + 1))
+				|| !strcat(message, sender->cache))
 				fatal_exit();
+			bzero(sender->cache, sender->cache_size);
+			free(sender->cache);
+			if (!(sender->cache = calloc(1, sizeof(char))))
+				fatal_exit();
+			sender->cache_size = 0;
 		}
 		*nlpos = '\0';
-		if (!(message = realloc(message,  strlen(message) + (nlpos - buff) + 1))
+		if (!(message = realloc(message,  strlen(message) + (nlpos - buff) + 2))
 			|| !strcat(message, buff) || !strcat(message, "\n"))
 			fatal_exit();
 		clients = init;
@@ -190,13 +194,16 @@ static void			send_messages(t_list *sender, char *buff, t_serv_conf *serv,
 			clients = clients->next;
 		}
 		buff = nlpos + 1;
+		bzero(message, strlen(message));
 		free(message);
 	}
-	if (*buff != '\0' &&
-		(!(sender->cache = realloc(sender->cache, strlen(sender->cache)
-		+ strlen(buff) + 1))
-		|| !strcat(sender->cache, buff)))
-		fatal_exit();
+	if (*buff != '\0')
+	{
+		sender->cache_size += strlen(buff);
+		if (!(sender->cache = realloc(sender->cache, sender->cache_size + 1))
+			|| !strcat(sender->cache, buff))
+			fatal_exit();
+	}
 }
 
 int					main(int argc, char **argv)
@@ -229,10 +236,10 @@ int					main(int argc, char **argv)
 				add_user(&serv, &clients);
 			else
 			{
-				char buff[BUFFER_SIZE];
+				char buff[BUFFER_SIZE + 1];
 				bzero(buff, sizeof(buff));
-				int rbytes;
-				if ((rbytes = recv(temp->fd, buff, BUFFER_SIZE, 0)) < 0)
+				int rbytes = recv(temp->fd, buff, BUFFER_SIZE, 0);
+				if (rbytes < 0)
 					fatal_exit();
 				else if (rbytes == 0)
 					temp = remove_user(temp, &serv, &clients);
