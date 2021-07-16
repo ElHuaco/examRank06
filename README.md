@@ -1,1 +1,1 @@
-`recv()` until `'\n'` is read -> [Link](http://developerweb.net/viewtopic.php?id=4006)
+`recv()` with defined buffer size, then add to cache if no newline was found, this way you don't need an inelegantly huge buffer.
