@@ -173,7 +173,7 @@ static void			send_messages(t_list *sender, char *buff, t_serv_conf *serv,
 				+ sender->cache_size + 1))
 				|| !strcat(message, sender->cache))
 				fatal_exit();
-			bzero(sender->cache, sender->cache_size);
+			bzero(sender->cache, sender->cache_size + 1);
 			free(sender->cache);
 			if (!(sender->cache = calloc(1, sizeof(char))))
 				fatal_exit();
@@ -194,7 +194,7 @@ static void			send_messages(t_list *sender, char *buff, t_serv_conf *serv,
 			clients = clients->next;
 		}
 		buff = nlpos + 1;
-		bzero(message, strlen(message));
+		bzero(message, strlen(message) + 1);
 		free(message);
 	}
 	if (*buff != '\0')
