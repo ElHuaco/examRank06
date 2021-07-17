@@ -13,7 +13,7 @@ typedef struct		s_list
 	int				fd;
 	int				id;
 	char			*cache;
-	int				cache_size;
+	unsigned int	cache_size;
 	struct s_list	*next;
 }					t_list;
 
@@ -187,8 +187,6 @@ static void			send_messages(t_list *sender, char *buff, t_serv_conf *serv,
 				+ sender->cache_size + 1 + 1 * (*buff == '\0')))
 				|| !strcat(message, sender->cache))
 				fatal_exit();
-			if (*buff == '\0' && !strcat(message, "\n"))
-				fatal_exit();
 			bzero(sender->cache, sender->cache_size + 1);
 			free(sender->cache);
 			if (!(sender->cache = calloc(1, sizeof(char))))
@@ -199,11 +197,12 @@ static void			send_messages(t_list *sender, char *buff, t_serv_conf *serv,
 		{
 			*nlpos = '\0';
 			if (!(message = realloc(message,  strlen(message)
-				+ (nlpos - buff) + 2))
-				|| !strcat(message, buff) || !strcat(message, "\n"))
+				+ (nlpos - buff) + 2)) || !strcat(message, buff))
 				fatal_exit();
 			buff = nlpos + 1;
 		}
+		if (!strcat(message, "\n"))
+			fatal_exit();
 		clients = init->next;
 		while (clients != NULL)
 		{
