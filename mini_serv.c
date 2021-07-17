@@ -91,15 +91,18 @@ static void			add_user(t_serv_conf *serv, t_list **clients)
 	newclient->next = NULL;
 	if (!(newclient->cache = calloc(1, sizeof(char))))
 		fatal_exit();
-printf("newclient->fd is %d\n", newclient->fd);
+//printf("t_list size: %lu; *newclient size: %lu\n", sizeof(t_list), sizeof(*newclient));
 	temp->next = newclient;
-printf("newclient->fd is %d\n", newclient->fd);
+//printf("ft_digits(id): %d\n", ft_digits(newclient->id));
 	char *message;
-	if (!(message = calloc(ft_digits(newfd) + 30, sizeof(char)))
+	if (!(message = calloc(ft_digits(newclient->id) + 31, sizeof(char)))
 		|| sprintf(message, "server: client %d just arrived\n",
 			newclient->id) < 0)
 		fatal_exit();
-printf("newclient->fd is %d\n", newclient->fd);
+//printf("message size: %lu\n", strlen(message));
+//printf("sprintf size: %lu\n", strlen("server: client just arrived\n")
+//	+ ft_digits(newclient->id) + 1);
+//printf("newclient->fd is %d\n", newclient->fd);
 	temp = init->next;
 	while (temp != NULL)
 	{
@@ -111,14 +114,14 @@ printf("newclient->fd is %d\n", newclient->fd);
 	}
 	if (newfd > serv->max)
 		serv->max = newfd;
-printf("========After add==========\n");
-temp = init;
-printf("Now list is: \n");
-while (temp != NULL)
-{
-printf("Client [%d](fd: %d)\n", temp->id, temp->fd);
-temp = temp->next;
-}
+//printf("========After add==========\n");
+//temp = init;
+//printf("Now list is: \n");
+//while (temp != NULL)
+//{
+//printf("Client [%d](fd: %d)\n", temp->id, temp->fd);
+//temp = temp->next;
+//}
 	*clients = init;
 	free(message);
 }
@@ -126,13 +129,12 @@ temp = temp->next;
 static t_list		*remove_user(t_list *removed, t_serv_conf *serv,
 	t_list **clients)
 {
-printf("Closing %d...\n", removed->fd);
 	if (close(removed->fd) < 0)
 		fatal_exit();
 	FD_CLR(removed->fd, &serv->read_master);
 	FD_CLR(removed->fd, &serv->write_master);
 	char *message;
-	if (!(message = calloc(ft_digits(removed->id) + 27, sizeof(char)))
+	if (!(message = calloc(ft_digits(removed->id) + 28, sizeof(char)))
 		|| sprintf(message, "server: client %d just left\n", removed->id) < 0)
 		fatal_exit();
 	t_list *init = *clients;
@@ -162,14 +164,14 @@ printf("Closing %d...\n", removed->fd);
 			temp = temp->next;
 		}
 	}
-printf("=======After remove========\n");
-temp = init;
-printf("Now list is: \n");
-while (temp != NULL)
-{
-printf("Client [%d](fd: %d)\n", temp->id, temp->fd);
-temp = temp->next;
-}
+//printf("=======After remove========\n");
+//temp = init;
+//printf("Now list is: \n");
+//while (temp != NULL)
+//{
+//printf("Client [%d](fd: %d)\n", temp->id, temp->fd);
+//temp = temp->next;
+//}
 	*clients = init;
 	free(message);
 	free(removed->cache);
@@ -302,14 +304,13 @@ int					main(int argc, char **argv)
 //}
 		for (temp = clients; temp != NULL; temp = temp->next)
 		{
-			usleep(10000);
 			if (!FD_ISSET(temp->fd, &serv.read_fds))
 				continue ;
-			else if (temp->fd != clients->fd)
-printf("Client %d(fd:%d) is ready to send.\n", temp->id, temp->fd);
+			//else if (temp->fd != clients->fd)
+//printf("Client %d(fd:%d) is ready to send.\n", temp->id, temp->fd);
 			if (temp->fd == serv.listener)
 			{
-printf("New connection registered.\n");
+//printf("New connection registered.\n");
 				add_user(&serv, &clients);
 			}
 			else
@@ -317,8 +318,8 @@ printf("New connection registered.\n");
 				char buff[BUFFER_SIZE + 1];
 				bzero(buff, sizeof(buff));
 				int rbytes = recv(temp->fd, buff, BUFFER_SIZE, 0);
-printf("Received %d bytes from client %d\n", rbytes, temp->id);
-printf("Cache for client %d: \"%s\"\n", temp->id, temp->cache);
+//printf("Received %d bytes from client %d\n", rbytes, temp->id);
+//printf("Cache for client %d: \"%s\"\n", temp->id, temp->cache);
 				if (rbytes < 0)
 					fatal_exit();
 				else if (rbytes == 0)
