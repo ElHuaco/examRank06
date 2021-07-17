@@ -204,11 +204,10 @@ static void			send_messages(t_list *sender, char *buff, t_serv_conf *serv,
 				fatal_exit();
 			buff = nlpos + 1;
 		}
-		clients = init;
+		clients = init->next;
 		while (clients != NULL)
 		{
 			if (FD_ISSET(clients->fd, &serv->write_fds)
-				&& clients->fd != serv->listener
 				&& clients->fd != sender->fd
 				&& send(clients->fd, message, strlen(message), 0) == -1)
 				fatal_exit();
