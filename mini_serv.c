@@ -1,5 +1,4 @@
 #include <sys/socket.h>
-#include <sys/time.h>
 #include <sys/select.h>
 #include <netdb.h>
 #include <unistd.h>
@@ -70,6 +69,7 @@ static t_serv_conf	load_server_conf(unsigned short int port)
 
 static void			add_user(t_serv_conf *serv, t_list **clients)
 {
+	//Accept new socket
 	struct sockaddr_storage remoteaddr;
 	socklen_t addrlen = sizeof(remoteaddr);
 	bzero(&remoteaddr, addrlen);
@@ -77,8 +77,10 @@ static void			add_user(t_serv_conf *serv, t_list **clients)
 	if ((newfd = accept(serv->listener, (struct sockaddr *)&remoteaddr,
 		&addrlen)) < 0)
 		fatal_exit();
+	//Set socket in the server master sets
 	FD_SET(newfd, &serv->read_master);
 	FD_SET(newfd, &serv->write_master);
+	//Add user in the clients list
 	t_list *init = *clients;
 	t_list *temp = *clients;
 	while (temp->next != NULL)
@@ -91,18 +93,13 @@ static void			add_user(t_serv_conf *serv, t_list **clients)
 	newclient->next = NULL;
 	if (!(newclient->cache = calloc(1, sizeof(char))))
 		fatal_exit();
-//printf("t_list size: %lu; *newclient size: %lu\n", sizeof(t_list), sizeof(*newclient));
 	temp->next = newclient;
-//printf("ft_digits(id): %d\n", ft_digits(newclient->id));
+	//Send new client message to all other clients
 	char *message;
 	if (!(message = calloc(ft_digits(newclient->id) + 31, sizeof(char)))
 		|| sprintf(message, "server: client %d just arrived\n",
 			newclient->id) < 0)
 		fatal_exit();
-//printf("message size: %lu\n", strlen(message));
-//printf("sprintf size: %lu\n", strlen("server: client just arrived\n")
-//	+ ft_digits(newclient->id) + 1);
-//printf("newclient->fd is %d\n", newclient->fd);
 	temp = init->next;
 	while (temp != NULL)
 	{
@@ -112,16 +109,9 @@ static void			add_user(t_serv_conf *serv, t_list **clients)
 			fatal_exit();
 		temp = temp->next;
 	}
+	//Update server max fd if needed
 	if (newfd > serv->max)
 		serv->max = newfd;
-//printf("========After add==========\n");
-//temp = init;
-//printf("Now list is: \n");
-//while (temp != NULL)
-//{
-//printf("Client [%d](fd: %d)\n", temp->id, temp->fd);
-//temp = temp->next;
-//}
 	*clients = init;
 	free(message);
 }
@@ -129,10 +119,14 @@ static void			add_user(t_serv_conf *serv, t_list **clients)
 static t_list		*remove_user(t_list *removed, t_serv_conf *serv,
 	t_list **clients)
 {
+	//Close socket
 	if (close(removed->fd) < 0)
 		fatal_exit();
+	//Remove socket from server master sets
 	FD_CLR(removed->fd, &serv->read_master);
 	FD_CLR(removed->fd, &serv->write_master);
+	//Remove client from clients list
+	// AND send client left message to all other clients
 	char *message;
 	if (!(message = calloc(ft_digits(removed->id) + 28, sizeof(char)))
 		|| sprintf(message, "server: client %d just left\n", removed->id) < 0)
@@ -153,6 +147,7 @@ static t_list		*remove_user(t_list *removed, t_serv_conf *serv,
 			fatal_exit();
 		temp = temp->next;
 	}
+	//Update server max fd if needed
 	if (serv->max == removed->fd)
 	{
 		serv->max = 0;
@@ -164,14 +159,6 @@ static t_list		*remove_user(t_list *removed, t_serv_conf *serv,
 			temp = temp->next;
 		}
 	}
-//printf("=======After remove========\n");
-//temp = init;
-//printf("Now list is: \n");
-//while (temp != NULL)
-//{
-//printf("Client [%d](fd: %d)\n", temp->id, temp->fd);
-//temp = temp->next;
-//}
 	*clients = init;
 	free(message);
 	free(removed->cache);
@@ -186,43 +173,21 @@ static void			send_messages(t_list *sender, char *buff, t_serv_conf *serv,
 	char	*nlpos;
 	t_list	*init = clients;
 
-	if (*buff == '\0' && sender->cache_size > 0)
-	{
-		if (!(message = calloc(ft_digits(sender->id) + 10, sizeof(char)))
-			|| sprintf(message, "client %d: ", sender->id) < 0
-			|| !(message = realloc(message, strlen(message)
-				+ sender->cache_size + 2))
-			|| !strcat(message, sender->cache) || !strcat(message, "\n"))
-			fatal_exit();
-		clients = init;
-		while (clients != NULL)
-		{
-			if (FD_ISSET(clients->fd, &serv->write_fds)
-				&& clients->fd != serv->listener
-				&& clients->fd != sender->fd
-				&& send(clients->fd, message, strlen(message), 0) == -1)
-				fatal_exit();
-			clients = clients->next;
-		}
-		bzero(message, strlen(message) + 1);
-		free(message);
-		bzero(sender->cache, sender->cache_size + 1);
-		free(sender->cache);
-		if (!(sender->cache = calloc(1, sizeof(char))))
-			fatal_exit();
-		sender->cache_size = 0;
-		return ;
-	}
-	while ((nlpos = strstr(buff, "\n")) != NULL)
+	//Send what's stored in the cache if no bytes were read
+	// OR send whatever lines have been read
+	while ((sender->cache_size > 0 && *buff == '\0')
+		|| (nlpos = strstr(buff, "\n")) != NULL)
 	{
 		if (!(message = calloc(ft_digits(sender->id) + 10, sizeof(char)))
 			|| sprintf(message, "client %d: ", sender->id) < 0)
 			fatal_exit();
-		if (sender->cache[0] != '\0')
+		if (sender->cache_size > 0)
 		{
 			if (!(message = realloc(message, strlen(message)
-				+ sender->cache_size + 1))
+				+ sender->cache_size + 1 + 1 * (*buff == '\0')))
 				|| !strcat(message, sender->cache))
+				fatal_exit();
+			if (*buff == '\0' && !strcat(message, "\n"))
 				fatal_exit();
 			bzero(sender->cache, sender->cache_size + 1);
 			free(sender->cache);
@@ -230,10 +195,15 @@ static void			send_messages(t_list *sender, char *buff, t_serv_conf *serv,
 				fatal_exit();
 			sender->cache_size = 0;
 		}
-		*nlpos = '\0';
-		if (!(message = realloc(message,  strlen(message) + (nlpos - buff) + 2))
-			|| !strcat(message, buff) || !strcat(message, "\n"))
-			fatal_exit();
+		if (*buff)
+		{
+			*nlpos = '\0';
+			if (!(message = realloc(message,  strlen(message)
+				+ (nlpos - buff) + 2))
+				|| !strcat(message, buff) || !strcat(message, "\n"))
+				fatal_exit();
+			buff = nlpos + 1;
+		}
 		clients = init;
 		while (clients != NULL)
 		{
@@ -244,10 +214,10 @@ static void			send_messages(t_list *sender, char *buff, t_serv_conf *serv,
 				fatal_exit();
 			clients = clients->next;
 		}
-		buff = nlpos + 1;
 		bzero(message, strlen(message) + 1);
 		free(message);
 	}
+	//Store the read, incomplete line in the cache. This cannot contain '\n'
 	if (*buff != '\0')
 	{
 		sender->cache_size += strlen(buff);
@@ -255,19 +225,6 @@ static void			send_messages(t_list *sender, char *buff, t_serv_conf *serv,
 			|| !strcat(sender->cache, buff))
 			fatal_exit();
 	}
-}
-
-int	is_empty(void *raw_bits, unsigned int size)
-{
-	unsigned int i = 0;
-	unsigned char *bits = raw_bits;
-	while (i < size)
-	{
-		if (bits[i])
-			return (0);
-		++i;
-	}
-	return (1);
 }
 
 int					main(int argc, char **argv)
@@ -292,34 +249,17 @@ int					main(int argc, char **argv)
 		FD_COPY(&serv.write_master, &serv.write_fds);
 		if (select(serv.max + 1, &serv.read_fds, &serv.write_fds, 0, 0) == -1)
 			fatal_exit();
-//printf("=========Main Loop=========\n");
-//temp = clients;
-//printf("Now list is: \n");
-//printf("init, #%d(fd: %d)\n", temp->id, temp->fd);
-//temp = temp->next;
-//while (temp != NULL)
-//{
-//printf("Client [%d](fd: %d)\n", temp->id, temp->fd);
-//temp = temp->next;
-//}
 		for (temp = clients; temp != NULL; temp = temp->next)
 		{
 			if (!FD_ISSET(temp->fd, &serv.read_fds))
 				continue ;
-			//else if (temp->fd != clients->fd)
-//printf("Client %d(fd:%d) is ready to send.\n", temp->id, temp->fd);
 			if (temp->fd == serv.listener)
-			{
-//printf("New connection registered.\n");
 				add_user(&serv, &clients);
-			}
 			else
 			{
 				char buff[BUFFER_SIZE + 1];
 				bzero(buff, sizeof(buff));
 				int rbytes = recv(temp->fd, buff, BUFFER_SIZE, 0);
-//printf("Received %d bytes from client %d\n", rbytes, temp->id);
-//printf("Cache for client %d: \"%s\"\n", temp->id, temp->cache);
 				if (rbytes < 0)
 					fatal_exit();
 				else if (rbytes == 0)
