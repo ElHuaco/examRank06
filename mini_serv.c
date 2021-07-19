@@ -36,7 +36,7 @@ static void			fatal_exit(void)
 
 static int			ft_digits(int num)
 {
-	char	dummy[100];
+	char	dummy[16];
 	return (sprintf(dummy, "%d", num));
 }
 
