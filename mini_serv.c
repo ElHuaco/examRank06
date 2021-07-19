@@ -11,7 +11,7 @@
 typedef struct		s_list
 {
 	int				fd;
-	int				id;
+	unsigned int	id;
 	char			*cache;
 	unsigned int	cache_size;
 	struct s_list	*next;
@@ -36,10 +36,8 @@ static void			fatal_exit(void)
 
 static int			ft_digits(int num)
 {
-	int digits = 1;
-	while ((num /= 10) > 0)
-		digits++;
-	return (digits);
+	char	dummy[100];
+	return (sprintf(dummy, "%d", num));
 }
 
 static t_serv_conf	load_server_conf(unsigned short int port)
@@ -89,7 +87,7 @@ static void			add_user(t_serv_conf *serv, t_list **clients)
 	if (!(newclient = calloc(1, sizeof(t_list))))
 		fatal_exit();
 	newclient->fd = newfd;
-	newclient->id = init->id++ + 1;
+	newclient->id = init->id++;
 	newclient->next = NULL;
 	if (!(newclient->cache = calloc(1, sizeof(char))))
 		fatal_exit();
@@ -238,7 +236,6 @@ int					main(int argc, char **argv)
 	if (!(clients = calloc(1, sizeof(t_list))))
 		fatal_exit();
 	clients->fd = serv.listener;
-	clients->id = -1;
 	clients->next = NULL;
 	t_list *temp;
 	while(1)
