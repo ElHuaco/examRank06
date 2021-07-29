@@ -10,22 +10,22 @@
 
 typedef struct		s_list
 {
-	int				fd;
+	int		fd;
 	unsigned int	id;
-	char			*cache;
+	char		*cache;
 	unsigned int	cache_size;
 	struct s_list	*next;
-}					t_list;
+}			t_list;
 
 typedef struct		s_serv_conf
 {
-	int				listener;
-	fd_set			read_fds;
-	fd_set			read_master;
-	fd_set			write_fds;
-	fd_set			write_master;
-	int				max;
-}					t_serv_conf;
+	int		listener;
+	fd_set		read_fds;
+	fd_set		read_master;
+	fd_set		write_fds;
+	fd_set		write_master;
+	int		max;
+}			t_serv_conf;
 
 static void			fatal_exit(void)
 {
@@ -102,9 +102,8 @@ static void			add_user(t_serv_conf *serv, t_list **clients)
 	while (temp != NULL)
 	{
 		if (FD_ISSET(temp->fd, &serv->write_fds)
-			&& temp->fd != newfd
-			&& send(temp->fd, message, strlen(message), 0) == -1)
-			fatal_exit();
+			&& temp != newclient)
+			send(temp->fd, message, strlen(message), 0);
 		temp = temp->next;
 	}
 	//Update server max fd if needed
@@ -140,9 +139,8 @@ static t_list		*remove_user(t_list *removed, t_serv_conf *serv,
 			temp->next = removed->next;
 		}
 		if (FD_ISSET(temp->fd, &serv->write_fds) 
-			&& temp->fd != serv->listener
-			&& send(temp->fd, message, strlen(message), 0) == -1)
-			fatal_exit();
+			&& temp->fd != serv->listener)
+			send(temp->fd, message, strlen(message), 0);
 		temp = temp->next;
 	}
 	//Update server max fd if needed
@@ -205,9 +203,8 @@ static void			send_messages(t_list *sender, char *buff, t_serv_conf *serv,
 		while (clients != NULL)
 		{
 			if (FD_ISSET(clients->fd, &serv->write_fds)
-				&& clients->fd != sender->fd
-				&& send(clients->fd, message, strlen(message), 0) == -1)
-				fatal_exit();
+				&& clients != sender)
+				send(clients->fd, message, strlen(message), 0);
 			clients = clients->next;
 		}
 		bzero(message, strlen(message) + 1);
@@ -242,8 +239,7 @@ int					main(int argc, char **argv)
 	{
 		FD_COPY(&serv.read_master, &serv.read_fds);
 		FD_COPY(&serv.write_master, &serv.write_fds);
-		if (select(serv.max + 1, &serv.read_fds, &serv.write_fds, 0, 0) == -1)
-			fatal_exit();
+		select(serv.max + 1, &serv.read_fds, &serv.write_fds, 0, 0);
 		for (temp = clients; temp != NULL; temp = temp->next)
 		{
 			if (!FD_ISSET(temp->fd, &serv.read_fds))
@@ -255,9 +251,7 @@ int					main(int argc, char **argv)
 				char buff[BUFFER_SIZE + 1];
 				bzero(buff, sizeof(buff));
 				int rbytes = recv(temp->fd, buff, BUFFER_SIZE, 0);
-				if (rbytes < 0)
-					fatal_exit();
-				else if (rbytes == 0)
+				if (rbytes <= 0)
 				{
 					if (temp->cache_size != 0)
 						send_messages(temp, buff, &serv, clients);
